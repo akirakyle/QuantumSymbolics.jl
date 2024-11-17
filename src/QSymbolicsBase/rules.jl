@@ -159,8 +159,9 @@ end
 RULES_EXPAND = [
     @rule(commutator(~o1, ~o2) => (~o1)*(~o2) - (~o2)*(~o1)),
     @rule(anticommutator(~o1, ~o2) => (~o1)*(~o2) + (~o2)*(~o1)),
-    @rule(~o1 ⊗ +(~~ops) => +(map(op -> ~o1 ⊗ op, ~~ops)...)),
-    @rule(+(~~ops) ⊗ ~o1 => +(map(op -> op ⊗ ~o1, ~~ops)...)),
+#    @rule(~o1 ⊗ +(~~ops) => +(map(op -> ~o1 ⊗ op, ~~ops)...)),
+#    @rule(+(~~ops) ⊗ ~o1 => +(map(op -> op ⊗ ~o1, ~~ops)...)),
+    @rule(⊗(~~a, +(~~x), ~~b) => +(map(op -> ⊗((~~a)..., op, (~~b)...), ~~x)...)),
     @rule(~o1 * +(~~ops) => +(map(op -> ~o1 * op, ~~ops)...)),
     @rule(+(~~ops) * ~o1 => +(map(op -> op * ~o1, ~~ops)...)),
     @rule(⊗(~~ops1::_vecisa(Symbolic{AbstractBra})) * ⊗(~~ops2::_vecisa(Symbolic{AbstractKet})) => *(map(*, ~~ops1, ~~ops2)...)),

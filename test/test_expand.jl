@@ -13,6 +13,9 @@
         @test isequal(qexpand(anticommutator(A, B)), A*B + B*A)
 
         @test isequal(qexpand(A⊗(B+C+D)), A⊗B + A⊗C + A⊗D)
+        @test isequal(qexpand(A⊗(B+C)⊗D), A⊗B⊗D + A⊗C⊗D)
+        @test isequal(qexpand(A⊗B⊗(C+D)), A⊗B⊗C + A⊗B⊗D)
+        @test isequal(qexpand(tensor(A,B,(C+D))), A⊗B⊗C + A⊗B⊗D)
         @test isequal(qexpand(C ⊗ commutator(A, B)), C⊗(A*B) - C⊗(B*A))
         @test isequal(qexpand(k₁⊗(k₂+k₃)), k₁⊗k₂ + k₁⊗k₃)
         @test isequal(qexpand(b₁⊗(b₂+b₃)), b₁⊗b₂ + b₁⊗b₃)
