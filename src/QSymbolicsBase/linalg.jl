@@ -527,3 +527,156 @@ Symbolic vector representation of an operator. See also [`SVec`](@ref).
 vec(x::Symbolic{AbstractOperator}) = SVec(x)
 vec(x::SScaled{AbstractOperator}) = x.coeff*vec(x.obj)
 vec(x::SAdd{AbstractOperator}) = (+)((vec(i) for i in arguments(x))...)
+
+
+########################################
+# Copied from QuantumInterface
+########################################
+
+function reduced(b::CompositeBasis, indices)
+    if length(indices)==0
+        throw(ArgumentError("At least one subsystem must be specified in reduced."))
+    elseif length(indices)==1
+        return b.bases[indices[1]]
+    else
+        return CompositeBasis(b.shape[indices], b.bases[indices])
+    end
+end
+
+function ptrace(b::CompositeBasis, indices)
+    J = [i for i in 1:length(b.bases) if i ∉ indices]
+    length(J) > 0 || throw(ArgumentError("Tracing over all indices is not allowed in ptrace."))
+    reduced(b, J)
+end
+
+_index_complement(b::CompositeBasis, indices) = complement(length(b.bases), indices)
+reduced(a, indices) = ptrace(a, _index_complement(basis(a), indices))
+
+function permutesystems(b::CompositeBasis, perm)
+    (nsubsystems(b) == length(perm)) || throw(ArgumentError("Must have nsubsystems(b) == length(perm) in permutesystems"))
+    isperm(perm) || throw(ArgumentError("Must pass actual permeutation to permutesystems"))
+    CompositeBasis(b.shape[perm], b.bases[perm])
+end
+
+
+function embed(bl::CompositeBasis, br::CompositeBasis,
+               operators::Dict{<:Vector{<:Integer}, T}) where T<:AbstractOperator
+    (nsubsystems(bl) == nsubsystems(br)) || throw(ArgumentError("Must have nsubsystems(bl) == nsubsystems(br) in embed"))
+    N = nsubsystems(bl)::Int # type assertion to help type inference
+    if length(operators) == 0
+        return identityoperator(T, bl, br)
+    end
+    indices, operator_list = zip(operators...)
+    operator_list = [operator_list...;]
+    S = mapreduce(eltype, promote_type, operator_list)
+    indices_flat = [indices...;]::Vector{Int} # type assertion to help type inference
+    start_indices_flat = [i[1] for i in indices]
+    complement_indices_flat = Int[i for i=1:N if i ∉ indices_flat]
+    operators_flat = AbstractOperator[]
+    if all(([minimum(I):maximum(I);]==I)::Bool for I in indices) # type assertion to help type inference
+        for i in 1:N
+            if i in complement_indices_flat
+                push!(operators_flat, identityoperator(T, S, bl[i], br[i]))
+            elseif i in start_indices_flat
+                push!(operators_flat, operator_list[indexin(i, start_indices_flat)[1]])
+            end
+        end
+        return tensor(operators_flat...)
+    else
+        complement_operators = [identityoperator(T, S, bl[i], br[i]) for i in complement_indices_flat]
+        op = tensor([operator_list; complement_operators]...)
+        perm = sortperm([indices_flat; complement_indices_flat])
+        return permutesystems(op, perm)
+    end
+end
+embed(basis_l::CompositeBasis, basis_r::CompositeBasis, operators::Dict{<:Integer, T}; kwargs...) where {T<:AbstractOperator} = embed(basis_l, basis_r, Dict([i]=>op_i for (i, op_i) in operators); kwargs...)
+embed(basis::CompositeBasis, operators::Dict{<:Integer, T}; kwargs...) where {T<:AbstractOperator} = embed(basis, basis, operators; kwargs...)
+embed(basis::CompositeBasis, operators::Dict{<:Vector{<:Integer}, T}; kwargs...) where {T<:AbstractOperator} = embed(basis, basis, operators; kwargs...)
+
+# The dictionary implementation works for non-DataOperators
+embed(basis_l::CompositeBasis, basis_r::CompositeBasis, indices, op::T) where T<:AbstractOperator = embed(basis_l, basis_r, Dict(indices=>op))
+
+embed(basis_l::CompositeBasis, basis_r::CompositeBasis, index::Integer, op::AbstractOperator) = embed(basis_l, basis_r, index, [op])
+embed(basis::CompositeBasis, indices, operators::Vector{T}) where {T<:AbstractOperator} = embed(basis, basis, indices, operators)
+embed(basis::CompositeBasis, indices, op::AbstractOperator) = embed(basis, basis, indices, op)
+
+
+function embed(bl::CompositeBasis, br::CompositeBasis,
+               indices, operators::Vector{T}) where T<:AbstractOperator
+
+    check_embed_indices(indices) || throw(ArgumentError("Must have unique indices in embed"))
+    (nsubsystems(basis_l) == nsubsystems(basis_r)) || throw(ArgumentError("Must have nsubsystems(bl) == nsubsystems(br) in embed"))
+    (length(indices) == length(operators)) || throw(ArgumentError("Must have length(indices) == length(operators) in embed"))
+
+    N = nsubsystems(basis_l)
+
+    # Embed all single-subspace operators.
+    idxop_sb = [x for x in zip(indices, operators) if x[1] isa Integer]
+    indices_sb = [x[1] for x in idxop_sb]
+    ops_sb = [x[2] for x in idxop_sb]
+
+    for (idxsb, opsb) in zip(indices_sb, ops_sb)
+        (basis_l(opsb) == bl[idxsb]) || throw(IncompatibleBases())
+        (basis_r(opsb) == br[idxsb]) || throw(IncompatibleBases())
+    end
+
+    S = length(operators) > 0 ? mapreduce(eltype, promote_type, operators) : Any
+    embed_op = tensor([i ∈ indices_sb ? ops_sb[indexin(i, indices_sb)[1]] : identityoperator(T, S, bl[i], br[i]) for i=1:N]...)
+
+    # Embed all joint-subspace operators.
+    idxop_comp = [x for x in zip(indices, operators) if x[1] isa Array]
+    for (idxs, op) in idxop_comp
+        embed_op *= embed(bl, br, idxs, op)
+    end
+
+    return embed_op
+end
+
+expect(indices, op::AbstractOperator, state::AbstractOperator) =
+    expect(op, ptrace(state, complement(nsubsystems(state), indices)))
+
+expect(index::Integer, op::AbstractOperator, state::AbstractOperator) = expect([index], op, state)
+
+expect(op::AbstractOperator, states::Vector) = [expect(op, state) for state=states]
+
+expect(indices, op::AbstractOperator, states::Vector) = [expect(indices, op, state) for state=states]
+
+expect(op::AbstractOperator, state::AbstractOperator) =
+    (check_multiplicable(state, state); check_multiplicable(op,state); tr(op*state))
+
+variance(indices, op::AbstractOperator, state::AbstractOperator) =
+    variance(op, ptrace(state, complement(nsubsystems(state), indices)))
+
+variance(index::Integer, op::AbstractOperator, state::AbstractOperator) = variance([index], op, state)
+
+variance(op::AbstractOperator, states::Vector) = [variance(op, state) for state=states]
+
+variance(indices, op::AbstractOperator, states::Vector) = [variance(indices, op, state) for state=states]
+
+function variance(op::AbstractOperator, state::AbstractOperator)
+    check_multiplicable(op,op)
+    check_multiplicable(state,state)
+    check_multiplicable(op,state)
+    @compatiblebases expect(op*op, state) - expect(op, state)^2
+end
+
+"""
+    identityoperator(a::Basis[, b::Basis])
+    identityoperator(::Type{<:AbstractOperator}, a::Basis[, b::Basis])
+    identityoperator(::Type{<:Number}, a::Basis[, b::Basis])
+    identityoperator(::Type{<:AbstractOperator}, ::Type{<:Number}, a::Basis[, b::Basis])
+
+Return an identityoperator in the given bases. One can optionally specify the container
+type which has to a subtype of [`AbstractOperator`](@ref) as well as the number type
+to be used in the identity matrix.
+"""
+identityoperator(::Type{T}, ::Type{S}, b1::Basis, b2::Basis) where {T<:AbstractOperator,S} = throw(ArgumentError("Identity operator not defined for operator type $T."))
+identityoperator(::Type{T}, ::Type{S}, b::Basis) where {T<:AbstractOperator,S} = identityoperator(T,S,b,b)
+identityoperator(::Type{T}, bases::Basis...) where T<:AbstractOperator = identityoperator(T,eltype(T),bases...)
+identityoperator(b::Basis) = identityoperator(ComplexF64,b)
+identityoperator(op::T) where {T<:AbstractOperator} = identityoperator(T, op.basis_l, op.basis_r)
+
+# Catch case where eltype cannot be inferred from type; this is a bit hacky
+identityoperator(::Type{T}, ::Type{Any}, b1::Basis, b2::Basis) where T<:AbstractOperator = identityoperator(T, ComplexF64, b1, b2)
+
+identityoperator(b1::Basis, b2::Basis) = identityoperator(ComplexF64, b1, b2)
