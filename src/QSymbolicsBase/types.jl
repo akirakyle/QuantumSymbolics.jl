@@ -14,6 +14,7 @@ abstract type QSymbolic{T} end
         name::Symbol = :OOF
         f::Function = identity
         arguments::Vector{BasicQSymExpr.Type} = BasicQSymExpr.Type[]
+        # make this iscall...
     end
     struct Add
         express_cache = Dict{Any,Any}()

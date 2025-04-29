@@ -1,18 +1,27 @@
 
 zero_args = (:name => :𝟎, :f => zero, :hermitian => true, unitary => false)
 """Symbolic zero bra"""
-SZeroBra(args...) = Sym{AbstractBra}((args..., zero_args...)...)
+function SZeroBra(space)
+    isbraspace(space) || throw(ArgumentError())
+    Sym{AbstractBra}(space=space, zero_args...)
+end
 
 """Symbolic zero ket"""
-SZeroKet(args...) = Sym{AbstractKet}((args..., zero_args...)...)
+function SZeroKet(space)
+    isketspace(space) || throw(ArgumentError())
+    Sym{AbstractKet}(space=space, zero_args...)
+end
 
 """Symbolic zero operator"""
-SZeroOperator(args...) = Sym{AbstractOperator}((args..., zero_args...)...)
+function SZeroOperator(space)
+    isoperatorspace(space) || throw(ArgumentError())
+    Sym{AbstractOperator}(space=space, zero_args...)
+end
 
 function SZero(space)
-    space isa KetSpace && return SZeroKet(space)
-    space isa BraSpace && return SZeroBra(space)
-    space isa OperatorSpace && return SZeroBra(space)
+    isketspace(space) && return SZeroKet(space)
+    isbraspace(space) && return SZeroBra(space)
+    isoperatorspace(space) && return SZeroBra(space)
 end
 
 """The identity operator for a given basis

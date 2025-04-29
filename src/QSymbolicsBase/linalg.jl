@@ -1,3 +1,20 @@
+function prefactorscalings(xs)
+    terms = []
+    coeff = 1::Any
+    for x in xs
+        if isa(x, SScaled)
+            coeff *= x.coeff
+            push!(terms, x.obj)
+        elseif isa(x, Union{Number, Symbolic{Number}})
+            coeff *= x
+        else
+            push!(terms,x)
+        end
+    end
+    coeff, terms
+end
+
+
 ##
 # Linear algebra operations on quantum objects.
 ##
