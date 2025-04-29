@@ -1,3 +1,45 @@
+
+zero_args = (:name => :𝟎, :f => zero, :hermitian => true, unitary => false)
+"""Symbolic zero bra"""
+SZeroBra(args...) = Sym{AbstractBra}((args..., zero_args...)...)
+
+"""Symbolic zero ket"""
+SZeroKet(args...) = Sym{AbstractKet}((args..., zero_args...)...)
+
+"""Symbolic zero operator"""
+SZeroOperator(args...) = Sym{AbstractOperator}((args..., zero_args...)...)
+
+function SZero(space)
+    space isa KetSpace && return SZeroKet(space)
+    space isa BraSpace && return SZeroBra(space)
+    space isa OperatorSpace && return SZeroBra(space)
+end
+
+"""The identity operator for a given basis
+
+```judoctest
+julia> IdentityOp(X1⊗X2)
+𝕀
+
+julia> express(IdentityOp(Z2))
+Operator(dim=2x2)
+  basis: Spin(1/2)sparse([1, 2], [1, 2], ComplexF64[1.0 + 0.0im, 1.0 + 0.0im], 2, 2)
+```
+"""
+@withmetadata struct IdentityOp <: Symbolic{AbstractOperator}
+    basis::Basis # From QuantumOpticsBase # TODO make QuantumInterface
+end
+IdentityOp(x::Symbolic{AbstractKet}) = IdentityOp(basis(x))
+IdentityOp(x::Symbolic{AbstractOperator}) = IdentityOp(basis(x))
+isexpr(::IdentityOp) = false
+basis(x::IdentityOp) = x.basis
+symbollabel(x::IdentityOp) = "𝕀"
+ishermitian(::IdentityOp) = true
+isunitary(::IdentityOp) = true
+
+"""Identity operator in qubit basis"""
+const I = IdentityOp(qubit_basis)   
+
 ##
 # Pure States
 ##
@@ -91,6 +133,7 @@ symbollabel(::ZGate) = "Z"
 ishermitian(::ZGate) = true
 isunitary(::ZGate) = true
 
+# todo fix this!
 @withmetadata struct PauliM <: AbstractSingleQubitGate end
 symbollabel(::PauliM) = "σ₋"
 ishermitian(::PauliM) = true
@@ -188,27 +231,3 @@ isexpr(::MixedState) = false
 basis(x::MixedState) = x.basis
 symbollabel(x::MixedState) = "𝕄"
 
-"""The identity operator for a given basis
-
-```judoctest
-julia> IdentityOp(X1⊗X2)
-𝕀
-
-julia> express(IdentityOp(Z2))
-Operator(dim=2x2)
-  basis: Spin(1/2)sparse([1, 2], [1, 2], ComplexF64[1.0 + 0.0im, 1.0 + 0.0im], 2, 2)
-```
-"""
-@withmetadata struct IdentityOp <: Symbolic{AbstractOperator}
-    basis::Basis # From QuantumOpticsBase # TODO make QuantumInterface
-end
-IdentityOp(x::Symbolic{AbstractKet}) = IdentityOp(basis(x))
-IdentityOp(x::Symbolic{AbstractOperator}) = IdentityOp(basis(x))
-isexpr(::IdentityOp) = false
-basis(x::IdentityOp) = x.basis
-symbollabel(x::IdentityOp) = "𝕀"
-ishermitian(::IdentityOp) = true
-isunitary(::IdentityOp) = true
-
-"""Identity operator in qubit basis"""
-const I = IdentityOp(qubit_basis)   

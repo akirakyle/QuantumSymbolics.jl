@@ -494,36 +494,3 @@ Base.show(io::IO, x::SExpOperator) = print(io, "exp($(x.op))")
 Symbolic exponential of an operator. See also [`SExpOperator`](@ref).
 """
 exp(x::Symbolic{AbstractOperator}) = SExpOperator(x)
-
-
-"""Vectorization of a symbolic operator.
-
-```jldoctest
-julia> @op A; @op B;
-
-julia> vec(A)
-|A⟩⟩
-
-julia> vec(A+B)
-|A⟩⟩+|B⟩⟩
-```
-"""
-@withmetadata struct SVec <: Symbolic{AbstractKet}
-    op::Symbolic{AbstractOperator}
-end
-isexpr(::SVec) = true
-iscall(::SVec) = true
-arguments(x::SVec) = [x.op]
-operation(x::SVec) = vec
-head(x::SVec) = :vec
-children(x::SVec) = [:vec, x.op]
-basis(x::SVec) = (⊗)(fill(basis(x.op), length(basis(x.op)))...)
-Base.show(io::IO, x::SVec) = print(io, "|$(x.op)⟩⟩")
-"""
-    vec(x::Symbolic{AbstractOperator})
-
-Symbolic vector representation of an operator. See also [`SVec`](@ref).
-"""
-vec(x::Symbolic{AbstractOperator}) = SVec(x)
-vec(x::SScaled{AbstractOperator}) = x.coeff*vec(x.obj)
-vec(x::SAdd{AbstractOperator}) = (+)((vec(i) for i in arguments(x))...)

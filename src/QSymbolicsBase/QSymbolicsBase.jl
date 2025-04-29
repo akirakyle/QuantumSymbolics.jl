@@ -4,8 +4,8 @@ using SymbolicUtils
 import SymbolicUtils: Symbolic,_isone,flatten_term,isnotflat,Chain,Fixpoint,Prewalk,sorted_arguments
 using TermInterface
 import TermInterface: isexpr,head,iscall,children,operation,arguments,metadata,maketerm
-import MacroTools
-import MacroTools: namify, @capture
+using Moshi.Data: @data, variant_type, variant_name
+using Moshi.Match: @match
 
 using LinearAlgebra
 import LinearAlgebra: eigvecs,ishermitian,conj,transpose,inv,exp,vec,tr
@@ -51,6 +51,8 @@ export SymQObj,QObj,
        isunitary,
        KrausRepr,kraus
 
+include("types.jl")
+
 ##
 # Metadata cache helpers
 ##
@@ -83,42 +85,6 @@ macro withmetadata(strct)
     metadata(x::$struct_name)=x.metadata
     end)
 end
-
-##
-# Basic Types
-##
-
-const QObj = Union{AbstractBra,AbstractKet,AbstractOperator,AbstractSuperOperator}
-const SymQObj = Symbolic{<:QObj} # TODO Should we use Sym or Symbolic... Sym has a lot of predefined goodies, including metadata support
-Base.:(-)(x::SymQObj) = (-1)*x
-Base.:(-)(x::SymQObj,y::SymQObj) = x + (-y)
-Base.hash(x::SymQObj, h::UInt) = isexpr(x) ? hash((head(x), arguments(x)), h) :
-hash((typeof(x),symbollabel(x),basis(x)), h)
-maketerm(::Type{<:SymQObj}, f, a, m) = f(a...)
-
-function Base.isequal(x::X,y::Y) where {X<:SymQObj, Y<:SymQObj}
-    if X==Y
-        if isexpr(x)
-            if operation(x)==operation(y)
-                ax,ay = arguments(x),arguments(y)
-                (operation(x) === +) ? x._set_precomputed == y._set_precomputed : all(zip(ax,ay)) do xy isequal(xy...) end
-            else
-                false
-            end
-        else
-            propsequal(x,y) # this is unholy
-        end
-    else
-        false
-    end
-end
-Base.isequal(::SymQObj, ::Symbolic{Complex}) = false
-Base.isequal(::Symbolic{Complex}, ::SymQObj) = false
-
-# TODO check that this does not cause incredibly bad runtime performance
-# use a macro to provide specializations if that is indeed the case
-propsequal(x,y) = all(n->(n==:metadata || isequal(getproperty(x,n),getproperty(y,n))), propertynames(x))
-
 
 ##
 # Utilities
