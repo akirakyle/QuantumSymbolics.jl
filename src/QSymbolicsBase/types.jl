@@ -1,11 +1,9 @@
 const QObj = Union{StateVector,AbstractOperator,AbstractSuperOperator}
 const SymQObj = Symbolic{<:QObj}
 
-abstract type QSymbolic{T} end
-
 # possibly move to simplified typing after this issue is resolved
 # https://github.com/Roger-luo/Moshi.jl/issues/33 
-@data BasicQSymExpr{T} <: QSymbolic{T} begin
+@data BasicQSymExpr{T} <: Symbolic{T} begin
     struct Sym
         express_cache = Dict{Any,Any}()
         hermitian = false
@@ -61,34 +59,27 @@ const Sum = BasicQSymExpr.Sum
 
 @inline function operation(x::BasicQSymbolic)
     @match x begin
-        Sym(_) => error_sym()
-        Add(_)  => (+)
-        Mul(_)  => (*)
-        Tensor(_)  => (⊗)
-        Sum(_)  => (⊕)
+        Sym(_) => x.f
+        Add(_) => (+)
+        Mul(_) => (*)
+        Tensor(_) => (⊗)
+        Sum(_) => (⊕)
     end
 end
 @inline head(x::BasicQSymbolic) = operation(x)
 
 function arguments(x::BasicQSymbolic)
     @match x begin
-        Sym(_) => error_sym()
-        Add(_)  => return [k*v for k,v in x.dict]
-        Mul(_)  => return [x.cterm; x.qterms]
-        Tensor(_)  => return [x.coeff*q for q in x.qterms]
-        Sum(_)  => return [x.coeff*q for q in x.qterms]
+        Sym(_) => x.arguments
+        Add(_) => [k*v for k,v in x.dict]
+        Mul(_) => [x.cterm; x.qterms]
+        Tensor(_) => [x.coeff*q for q in x.qterms]
+        Sum(_) => [x.coeff*q for q in x.qterms]
     end
 end
 children(x::BasicQSymbolic) = arguments(x)
-
-function isexpr(x::BasicQSymbolic)
-    @match x begin
-        Sym(_) => false
-        _ => true
-    end
-end
-
-function iscall(x::BasicQSymbolic) = isexpr(x)
+isexpr(x::BasicQSymbolic) = true
+iscall(x::BasicQSymbolic) = tru
 
 @inline isa_SymType(S, x) = x isa BasicQSymbolic ? variant_name(x) == S : false
 

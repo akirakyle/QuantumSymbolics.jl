@@ -107,46 +107,17 @@ function ⊗(a::BasicQSymbolic, b::BasicQSymbolic)
     end
 end
 
-@withmetadata struct KrausRepr <: Symbolic{AbstractSuperOperator}
-    krausops
-end
-isexpr(::KrausRepr) = true
-iscall(::KrausRepr) = true
-arguments(x::KrausRepr) = x.krausops
-operation(x::KrausRepr) = kraus
-head(x::KrausRepr) = :kraus
-children(x::KrausRepr) = [:kraus; x.krausops]
 kraus(xs::Symbolic{AbstractOperator}...) = KrausRepr(collect(xs))
-basis(x::KrausRepr) = basis(first(x.krausops))
 Base.:(*)(sop::KrausRepr, op::Symbolic{AbstractOperator}) = (+)((i*op*dagger(i) for i in sop.krausops)...)
 Base.:(*)(sop::KrausRepr, k::Symbolic{AbstractKet}) = (+)((i*SProjector(k)*dagger(i) for i in sop.krausops)...)
 Base.:(*)(sop::KrausRepr, k::SZeroOperator) = SZeroOperator()
 Base.:(*)(sop::KrausRepr, k::SZeroKet) = SZeroOperator()
-@withmetadata struct SSuperOpApply <: Symbolic{AbstractOperator}
-    sop
-    op
-end
-isexpr(::SSuperOpApply) = true
-iscall(::SSuperOpApply) = true
-arguments(x::SSuperOpApply) = [x.sop,x.op]
-operation(x::SSuperOpApply) = *
-head(x::SSuperOpApply) = :*
-children(x::SSuperOpApply) = [:*,x.sop,x.op]
+
 Base.:(*)(sop::Symbolic{AbstractSuperOperator}, op::Symbolic{AbstractOperator}) = SSuperOpApply(sop,op)
 Base.:(*)(sop::Symbolic{AbstractSuperOperator}, op::SZeroOperator) = SZeroOperator()
 Base.:(*)(sop::Symbolic{AbstractSuperOperator}, k::Symbolic{AbstractKet}) = SSuperOpApply(sop,SProjector(k))
 Base.:(*)(sop::Symbolic{AbstractSuperOperator}, k::SZeroKet) = SZeroOperator()
-basis(x::SSuperOpApply) = basis(x.op)
 
-@withmetadata struct SVec <: Symbolic{AbstractKet}
-    op::Symbolic{AbstractOperator}
-end
-isexpr(::SVec) = true
-iscall(::SVec) = true
-arguments(x::SVec) = [x.op]
-operation(x::SVec) = vec
-head(x::SVec) = :vec
-children(x::SVec) = [:vec, x.op]
 basis(x::SVec) = (⊗)(fill(basis(x.op), length(basis(x.op)))...)
 Base.show(io::IO, x::SVec) = print(io, "|$(x.op)⟩⟩")
 

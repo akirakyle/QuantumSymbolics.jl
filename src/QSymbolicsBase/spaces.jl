@@ -1,9 +1,31 @@
+abstract type AbstractHilbertSpace end
+abstract type AbstractOperatorSpace end
 
-struct OperatorSpace{T} where T <: Union{Int, Symbol}
-    left::Vector{T}
-    right::Vector{T}
+struct TrivialSpace <: AbstractHilbertSpace end
+struct NLevelSpace{T<: Union{Int, Symbol}} <: AbstractHilbertSpace
+    N::T
 end
-Base.:(==)(s1::OperatorSpace, s2::OperatorSpace) = a.left == b.left && a.right == b.right
+Base.:(==)(a::NLevelSpace, b::NLevelSpace) = a.N == b.N
+struct OscillatorSpace <: AbstractHilbertSpace end
+struct RotorSpace <: AbstractHilbertSpace end
+
+struct TrivialOpSpace <: AbstractOperatorSpace end
+struct NLevelOpSpace{T<: Union{Int, Symbol}} <: AbstractOperatorSpace
+    N::T
+end
+Base.:(==)(a::NLevelOpSpace, b::NLevelOpSpace) = a.N == b.N
+struct OscillatorOpSpace <: AbstractOperatorSpace end
+struct RotorOpSpace <: AbstractOperatorSpace end
+
+struct LinearSpace{S<:Union{AbstractHilbertSpace, AbstractOperatorSpace}}
+    left::Vector{S}
+    right::Vector{S}
+end
+#LinearSpace{T}(hs::S) where {T<:AbstractKet,S} = LinearSpace{T,S}(hs, TrivialSpace())
+Base.:(==)(a::LinearSpace, b::LinearSpace) = a.left == b.left && a.right == b.right
+#isketspace(s::OperatorSpace) = prod(s.right) == 1
+#isbraspace(s::OperatorSpace) = prod(s.left) == 1
+#isoperatorspace(s::OperatorSpace) = !(isketspace(s) || isbraspace(s))
 #space_l(s::LinearSpace) = s.left
 #space_r(s::LinearSpace) = s.right
 #dimension(s::OperatorSpace) = dimension(s.left)*dimension(s.right)
@@ -11,33 +33,9 @@ Base.:(==)(s1::OperatorSpace, s2::OperatorSpace) = a.left == b.left && a.right =
 #shape(s::StateSpace) = s.shape
 #dimension(s::StateSpace) = prod(s.shape)
 
-isketspace(s::OperatorSpace) = prod(s.right) == 1
-isbraspace(s::OperatorSpace) = prod(s.left) == 1
-isoperatorspace(s::OperatorSpace) = !(isketspace(s) || isbraspace(s))
-
-# not correct for oscillators or rotors, need to figure out better scheme
-# use symbol for these
-
-tensor(a::T, b::T) where T<:OperatorSpace = T([a.left; b.left], [a.right; b.right])
-dagger(s::OperatorSpace) = OperatorSpace(s.right, s.left)
-
-function _make_space{T}(N) where T
-    if T <: AbstractKet
-        OperatorSpace([N], [1])
-    elseif T <: AbstractBra
-        OperatorSpace([1], [N])
-    elseif T <: AbstractOperator
-        OperatorSpace([N], [N])
-    else
-        throw(ArgumentError())
-    end
-end
-
-TrivialSpace() = OperatorSpace([1], [1])
-QubitSpace{T}() where T = _make_space{T}(2)
-NLevelSpace{T}(N::Int) = _make_space{T}(N)
-OscillatorSpace{T}() where T = _make_space{T}(:oscillator)
-RotorSpace{T}() where T = _make_space{T}(:rotor)
+tensor(a::LinearSpace{<:AbstractHilbertSpace}, b::LinearSpace{<:AbstractHilbertSpace}) where T = LinearSpace{T}([a.left; b.left], [a.right; b.right])
+tensor(a::LinearSpace{<:AbstractOperatorSpace}, b::LinearSpace{<:AbstractOperatorSpace}) where T = LinearSpace{T}([a.left; b.left], [a.right; b.right])
+dagger(s::LinearSpace) = LinearSpace(s.right, s.left)
 
 """
 Exception that should be raised for an illegal algebraic operation.
@@ -80,10 +78,10 @@ function check_addible(a, b)
     return _add_space(a,b)
 end
 
-multiplicible(a::OperatorSpace, b::OperatorSpace) = a.right == b.left
+multiplicible(a::LinearSpace, b::LinearSpace) = a.right == b.left
 multiplicible(a::BasicQSymbolic, b::BasicQSymbolic) = multiplicible(space(a), space(b))
-_mul_space(a::OperatorSpace, b::OperatorSpace) = OperatorSpace(a.left,b.right)
-_mul_space(a::BasicQSymbolic, b::BasicQSymbolic) = mul_space(space(a), space(b))
+_mul_space(a::LinearSpace, b::LinearSpace) = LinearSpace(a.left,b.right)
+_mul_space(a::BasicQSymbolic, b::BasicQSymbolic) = _mul_space(space(a), space(b))
 
 """
     check_multiplicable(a, b)
