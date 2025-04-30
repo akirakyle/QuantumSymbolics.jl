@@ -1,15 +1,32 @@
-const QObj = Union{StateVector,AbstractOperator,AbstractSuperOperator}
-const SymQObj = Symbolic{<:QObj}
+abstract type QuantumObject end
+const SymQO = Symbolic{<:QuantumObject}
+
+struct md
+    express_cache = Dict{Any,Any}()
+    hermitian::Bool = false
+    unitary::Bool = false
+end
+
+# Two opposite ends of design space:
+# 1. Just make an abstract type QObj end for T
+# 2. Make T be all the bra, ket, operator, superbra, superket, superoperator
+# I think maybe I like 1 more, consider dynamically choosing bra vs operator when
+# the shape is symbolic, one coouldn't unless symbol is garunteed to be either 1 or not...
+# so suggests minimizing types in QuantumInterface which seems to be better interface option anyways
+# something something types manage dispatch...
 
 # possibly move to simplified typing after this issue is resolved
 # https://github.com/Roger-luo/Moshi.jl/issues/33 
 @data BasicQSymExpr{T} <: Symbolic{T} begin
     struct Sym
-        express_cache = Dict{Any,Any}()
-        hermitian = false
-        unitary = false
-        space = TrivialSpace()
+        metadata
+        space::AbstractSpace = TrivialSpace()
         name::Symbol = :OOF
+        # make this iscall...
+    end
+    struct Term
+        metadata
+        space::AbstractSpace = TrivialSpace()
         f::Function = identity
         arguments::Vector{BasicQSymExpr.Type} = BasicQSymExpr.Type[]
         # make this iscall...

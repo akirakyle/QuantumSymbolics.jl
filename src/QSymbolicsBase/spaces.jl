@@ -1,5 +1,5 @@
-abstract type AbstractHilbertSpace end
-abstract type AbstractOperatorSpace end
+abstract type AbstractSpace end
+abstract type AbstractHilbertSpace <: AbstractSpace end
 
 struct TrivialSpace <: AbstractHilbertSpace end
 struct NLevelSpace{T<: Union{Int, Symbol}} <: AbstractHilbertSpace
@@ -9,17 +9,14 @@ Base.:(==)(a::NLevelSpace, b::NLevelSpace) = a.N == b.N
 struct OscillatorSpace <: AbstractHilbertSpace end
 struct RotorSpace <: AbstractHilbertSpace end
 
-struct TrivialOpSpace <: AbstractOperatorSpace end
-struct NLevelOpSpace{T<: Union{Int, Symbol}} <: AbstractOperatorSpace
-    N::T
+struct CompositeHilbertSpace{T<:AbstractHilbertSpace} <: AbstractHilbertSpace
+    s::Vector{T}
 end
-Base.:(==)(a::NLevelOpSpace, b::NLevelOpSpace) = a.N == b.N
-struct OscillatorOpSpace <: AbstractOperatorSpace end
-struct RotorOpSpace <: AbstractOperatorSpace end
+Base.:(==)(a::CompositeHilbertSpace, b::CompositeHilbertSpace) = a.s == b.s
 
-struct LinearSpace{S<:Union{AbstractHilbertSpace, AbstractOperatorSpace}}
-    left::Vector{S}
-    right::Vector{S}
+struct OperatorSpace{T<:AbstractHilbertSpace} <: AbstractSpace
+    left::T
+    right::T
 end
 #LinearSpace{T}(hs::S) where {T<:AbstractKet,S} = LinearSpace{T,S}(hs, TrivialSpace())
 Base.:(==)(a::LinearSpace, b::LinearSpace) = a.left == b.left && a.right == b.right
@@ -59,9 +56,8 @@ macro compatiblespaces(ex)
     end
 end
 
-adible(a::OperatorSpace, b::OperatorSpace) = (a == b)
-addible(a::BasicQSymbolic, b::BasicQSymbolic) = addible(space(a), basis(b))
-_add_space(a::OperatorSpace, b::OperatorSpace) = a
+addible(a::BasicQSymbolic, b::BasicQSymbolic) = false
+addible(a::BasicQSymbolic{T}, b::BasicQSymbolic{T}) where T = space(a) == basis(b)
 _add_space(a::BasicQSymbolic, b::BasicQSymbolic) = space(a)
 
 """
@@ -78,10 +74,17 @@ function check_addible(a, b)
     return _add_space(a,b)
 end
 
-multiplicible(a::LinearSpace, b::LinearSpace) = a.right == b.left
-multiplicible(a::BasicQSymbolic, b::BasicQSymbolic) = multiplicible(space(a), space(b))
-_mul_space(a::LinearSpace, b::LinearSpace) = LinearSpace(a.left,b.right)
-_mul_space(a::BasicQSymbolic, b::BasicQSymbolic) = _mul_space(space(a), space(b))
+multiplicable(a::BasicQSymbolic, b::BasicQSymbolic) = false
+
+multiplicable(a::BasicQSymbolic{<:AbstractKet}, b::BasicQSymbolic{<:AbstractBra}) = true
+_mul_space(a::BasicQSymbolic{<:AbstractKet}, b::BasicQSymbolic{<:AbstractBra}) = OperatorSpace(space(a),space(b))
+
+multiplicable(a::BasicQSymbolic{<:AbstractBra}, b::BasicQSymbolic{<:AbstractKet}) = space(a) == space(b)
+_mul_space(a::BasicQSymbolic{<:AbstractBra}, b::BasicQSymbolic{<:AbstractKet}) = TrivialSpace()
+
+multiplicable(a::BasicQSymbolic{<:AbstractOperator}, b::BasicQSymbolic{<:AbstractKet}) = space(a) == space(b)
+_mul_space(a::BasicQSymbolic{<:AbstractBra}, b::BasicQSymbolic{<:AbstractKet}) = TrivialSpace()
+
 
 """
     check_multiplicable(a, b)
