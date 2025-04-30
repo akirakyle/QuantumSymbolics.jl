@@ -107,7 +107,11 @@ function ⊗(a::BasicQSymbolic, b::BasicQSymbolic)
     end
 end
 
-kraus(xs::Symbolic{AbstractOperator}...) = KrausRepr(collect(xs))
+function kraus(xs::SymQO...)
+    xs = collect(xs)
+    f
+end
+
 Base.:(*)(sop::KrausRepr, op::Symbolic{AbstractOperator}) = (+)((i*op*dagger(i) for i in sop.krausops)...)
 Base.:(*)(sop::KrausRepr, k::Symbolic{AbstractKet}) = (+)((i*SProjector(k)*dagger(i) for i in sop.krausops)...)
 Base.:(*)(sop::KrausRepr, k::SZeroOperator) = SZeroOperator()
