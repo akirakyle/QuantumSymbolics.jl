@@ -21,66 +21,77 @@ function _set_add_dict!(d, x)
     end
 end
 
-function +(a::BasicQSymbolic, b::BasicQSymbolic)
-    s = check_addible(a,b)
-    args = (:hermitian => ishermitian(a) && ishermitian(a), :unitary => false, :space => s) 
+function +(a::BasicQSymbolic{T}, b::BasicQSymbolic{S}) where {T,S}
+    check_addible(a,b)
+
     if isadd(a)
         d = Dict(a.dict)
         _set_add_dict!(d, b)
-        return Add(dict=d, args...)
     elseif isadd(b)
-        return b + a
+        d = Dict(b.dict)
+        _set_add_dict!(d, a)
     else
         d = Dict{BasicQSymbolic, Symbolic}()
         _set_add_dict!(d, a)
         _set_add_dict!(d, b)
-        return Add(dict=d, args...)
     end
+    length(d) == 0 && return zero(a)
+    add = Add{T}(dict=d, basis_l=basis_l(a), basis_r=basis_r(a))
+    metadata(add)[:hermitian] = ishermitian(a) && ishermitian(a)
 end
 
 Base.:(-)(x::BasicQSymbolic) = (-1)*x
 Base.:(-)(x::BasicQSymbolic,y::BasicQSymbolic) = x + (-y)
 
-function Base.:(*)(c::T, x::BasicQSymbolic) where {T<:Union{Number, Symbolic{<:Number}}}
+function Base.:(*)(c::T, x::BasicQSymbolic{S}) where {T<:Union{Number, Symbolic{<:Number}}, S}
     if (isa(c, Number) && iszero(c))
         zero(x)
     elseif (isa(c, Number) && isone(c))
         x
     else
-        args = (:hermitian => _isreal(c) && ishermitian(x), :unitary => false, :space => space(x))
-        @match x begin
-            (Sym(_) || Add(_)) => Mul(coeff=c, terms=[x], args...)
-            Mul(_) => Mul(coeff=c*x.coeff, terms=x.terms, args...)
-            Tensor(_) => Tensor(coeff=c*x.coeff, terms=x.terms, args...)
-            Sum(_) => Sum(coeff=c*x.coeff, terms=x.terms, args...)
+        bases = (:basis_l => basis_l(x), :basis_r => basis_r(x))
+        op = @match x begin
+            (Sym(_) || Add(_)) => Mul{S}(coeff=c, terms=[x], bases...)
+            Mul(_) => Mul{S}(coeff=c*x.coeff, terms=x.terms, bases...)
+            Tensor(_) => Tensor{S}(coeff=c*x.coeff, terms=x.terms, bases...)
+            Sum(_) => Sum{S}(coeff=c*x.coeff, terms=x.terms, bases...)
         end
+        metadata(op)[:hermitian] = _isreal(c) && ishermitian(x)
+        op
     end
 end
 
 Base.:(*)(x::BasicQSymbolic, c::T) where {T<:Union{Number, Symbolic{<:Number}}} = c*x
 Base.:(/)(x::BasicQSymbolic, c::T) where {T<:Union{Number, Symbolic{<:Number}}} = iszero(c) ? throw(DomainError(c,"cannot divide QSymbolics expressions by zero")) : (1/c)*x
 
-function Base.:(*)(a::BasicQSymbolic, b::BasicQSymbolic)
-    s = check_multiplicable(a,b)
+_mul_type(A::Type{<:AbstractBra}, B::Type{<:AbstractKet}) = Number
+_mul_type(A::Type{<:AbstractKet}, B::Type{<:AbstractBra}) = AbstractOperator
+_mul_type(A::Type{<:AbstractKet}, B::Type{<:AbstractBra}) = AbstractOperator
+
+function Base.:(*)(a::BasicQSymbolic{T}, b::BasicQSymbolic{S})
+    U = _mul_type(T,S)
+    check_multiplicable(a,b)
     if iszero(a) || iszero(b)
-        return SZero(s)
+        return SZero(basis_l(a), basis_r(b))
     end
-    args = (:hermitian => false, :unitary => isunitary(a) && isunitary(b), :space => s)
+    bases = (:basis_l => basis_l(a), :basis_r => basis_r(b))
     if ismul(a) && ismul(b)
-        Mul(coeff=a.coeff*b.coeff, terms=[a.terms; b.terms], args...)
+        op = Mul{U}(coeff=a.coeff*b.coeff, terms=[a.terms; b.terms], bases...)
     elseif ismul(a)
         k,v = get_coeff_and_op(b)
-        Mul(coeff=k*a.coeff, terms=[a.terms; v], args...)
+        op = Mul{U}(coeff=k*a.coeff, terms=[a.terms; v], bases...)
     elseif ismul(b)
         k,v = get_coeff_and_op(a)
-        Mul(coeff=k*b.coeff, terms=[v; b.terms], args...)
+        op = Mul{U}(coeff=k*b.coeff, terms=[v; b.terms], bases...)
     elseif (istensor(a) && istensor(b)) || (issum(a) && issum(b))
-        Tensor(coeff=a.coeff*b.coeff, terms=[x*y for (x,y) in zip(a.terms, b.terms)], args...)
+        op = Tensor{U}(coeff=a.coeff*b.coeff, terms=[x*y for (x,y) in zip(a.terms, b.terms)], bases...)
     else
         ka,va = get_coeff_and_op(a)
         kb,vb = get_coeff_and_op(b)
-        Mul(coeff=ka*kb, terms=[va,vb], args...)
+        op = Mul{U}(coeff=ka*kb, terms=[va,vb], bases...)
     end
+    metadata(op)[:unitary] = isunitary(a) && isunitary(b)
+    op
 end
 
 function ⊗(a::BasicQSymbolic, b::BasicQSymbolic)

@@ -1,48 +1,60 @@
 abstract type QuantumObject end
 const SymQO = Symbolic{<:QuantumObject}
 
-const default_md = Dict{Symbol, Any}()
-const default_space = QOSpace(TrivialSpace(), TrivialSpace())
-#:express_cache => Dict{Tuple{<:AbstractRepresentation,<:AbstractUse},Any}(),
-#:hermitian => false,
-#:unitary => false)
+struct TrivialSpace <: Basis end
+struct OscillatorSpace <: Basis end
+struct RotorSpace <: Basis end
+struct NLevelSpace{T<: Union{Int, Symbol}} <: Basis
+    N::T
+end
+
+_default_md() = Dict{Symbol, Any}(
+    :express_cache => Dict{Tuple{<:AbstractRepresentation,<:AbstractUse},Any}(),
+    :hermitian => false,
+    :unitary => false)
 
 # possibly move to simplified typing after this issue is resolved
 # https://github.com/Roger-luo/Moshi.jl/issues/33 
 @data BasicQSymExpr{T} <: Symbolic{T} begin
     struct Term
-        metadata::Dict{Symbol,Any} = default_md
-        space::AbstractSpace = default_space
-        f::Function = identity
+        metadata::Dict{Symbol,Any} = _default_md()
+        basis_l::Basis
+        basis_r::Basis
+        f::Function
         arguments::Vector{BasicQSymExpr.Type} = BasicQSymExpr.Type[]
     end
     struct Sym
-        metadata::Dict{Symbol,Any} = default_md
-        space::AbstractSpace = default_space
-        name::Symbol = :OOF
+        metadata::Dict{Symbol,Any} = _default_md()
+        basis_l::Basis
+        basis_r::Basis
+        name::Symbol
     end
     struct Add
-        metadata::Dict{Symbol,Any} = default_md
-        space::AbstractSpace = default_space
-        dict::Dict{BasicQSymExpr.Type, Symbolic} = Dict{BasicQSymExpr.Type, Symbolic}()
+        metadata::Dict{Symbol,Any} = _default_md()
+        basis_l::Basis
+        basis_r::Basis
+        dict::Dict{BasicQSymExpr.Type, Symbolic}
     end
     struct Mul
-        metadata::Dict{Symbol,Any} = default_md
-        space::AbstractSpace = default_space
-        coeff::Symbolic = 1
-        terms::Vector{BasicQSymExpr.Type} = BasicQSymExpr.Type[]
+        metadata::Dict{Symbol,Any} = _default_md()
+        basis_l::Basis
+        basis_r::Basis
+        coeff::Symbolic
+        terms::Vector{BasicQSymExpr.Type}
     end
     struct Sum
-        metadata::Dict{Symbol,Any} = default_md
-        space::AbstractSpace = default_space
-        coeff::Symbolic = 1
-        terms::Vector{BasicQSymExpr.Type} = BasicQSymExpr.Type[]
+        metadata::Dict{Symbol,Any} = _default_md()
+        basis_l::Basis
+        basis_r::Basis
+        coeff::Symboli
+        terms::Vector{BasicQSymExpr.Type}
     end
     struct Tensor
-        metadata::Dict{Symbol,Any} = default_md
-        space::AbstractSpace = default_space
-        coeff::Symbolic = 1
-        terms::Vector{BasicQSymExpr.Type} = BasicQSymExpr.Type[]
+        metadata::Dict{Symbol,Any} = _default_md()
+        basis_l::Basis
+        basis_r::Basis
+        coeff::Symbolic
+        terms::Vector{BasicQSymExpr.Type}
     end
 end
 
@@ -53,13 +65,6 @@ const Add = BasicQSymExpr.Add
 const Mul = BasicQSymExpr.Mul
 const Sum = BasicQSymExpr.Sum
 const Tensor = BasicQSymExpr.Tensor
-
-Term(args...) = Term{QObj}(args...)
-Sym(args...) = Sym{QObj}(args...)
-Add(args...) = Add{QObj}(args...)
-Mul(args...) = Mul{QObj}(args...)
-Sum(args...) = Sum{QObj}(args...)
-Tensor(args...) = Tensor{QObj}(args...)
 
 @noinline error_on_type() = error("Internal error: unreachable reached!")
 @noinline error_sym() = error("QSym doesn't have a operation or arguments!")
@@ -110,10 +115,14 @@ ismul(x)  = isa_SymType(:Mul, x)
 istensor(x)  = isa_SymType(:Tensor, x)
 issum(x)  = isa_SymType(:Sum, x)
 
-metadata(x::BasicQSymbolic) = nothing
-space(x::BasicQSymbolic) = x.space
-ishermitian(x::BasicQSymbolic) = x.hermitian
-isunitary(x::BasicQSymbolic) = x.unitary
+metadata(x::BasicQSymbolic) = x.metadata
+basis_l(x::BasicQSymbolic) = x.basis_l
+basis_r(x::BasicQSymbolic) = x.basis_r
+ishermitian(x::BasicQSymbolic) = x.metadata[:hermitian]
+isunitary(x::BasicQSymbolic) = x.unitary[:unitary]
+
+addible(a::BasicQSymbolic, b::BasicQSymbolic) = addible(warp(a), wrap(b))
+multiplicable(a::BasicQSymbolic, b::BasicQSymbolic) = multiplicable(warp(a), wrap(b))
 
 Base.nameof(s::BasicSymbolic) = issym(s) ? s.name : error("This BasicQSymbolic doesn't have a name")
 Base.hash(x::BasicQSymbolic, h::UInt) = isexpr(x) ? hash((head(x), arguments(x)), h) :
@@ -126,10 +135,11 @@ function Base.isequal(a::BasicQSymbolic{T}, b::BasicQSymbolic{S}) where {T,S}
     T === S || return false
 
     @match (a, b) begin
-        (Sym(_), Sym(_)) => nameof(a) === nameof(b)
+        (Term(_), Term(_)) => a.f === b.f && isequal(a.arguments, b.arguments)
+        (Sym(_), Sym(_)) => a.name === b.name
         (Add(_), Add(_)) => isequal(a.dict, b.dict)
-        (Mul(_), Mul(_)) => isequal(a.cterm, b.cterm) && isequal(a.qterms, b.qterms)
-        (Tensor(_), Tensor(_)) || (Sum(_), Sum(_)) => isequal(a.coeffs, b.coeffs) && isequal(a.terms, b.terms)
+        (Mul(_), Mul(_)) || (Sum(_), Sum(_)) || (Tensor(_), Tensor(_)) =>
+            isequal(a.coeffs, b.coeffs) && isequal(a.terms, b.terms)
         _ => error_on_type()
     end
 end
@@ -141,12 +151,43 @@ Base.iszero(x::BasicQSymbolic) = isqsym(x) && x.f == zero
 
 function get_coeff_and_op(x::BasicQSymbolic)
     @match x begin
-        (Sym(_) || Add(_)) => (1, x)
+        (Term(_) || Sym(_) || Add(_)) => (1, x)
         Mul(_) => (x.coeff, Mul(hermitian=x.hermitian, unitary=x.unitary, space=x.space, terms=x.terms))
-        Tensor(_) => (x.coeff, Tensor(hermitian=x.hermitian, unitary=x.unitary, space=x.space, terms=x.terms))
         Sum(_) => (x.coeff, Sum(hermitian=x.hermitian, unitary=x.unitary, space=x.space, terms=x.terms))
+        Tensor(_) => (x.coeff, Tensor(hermitian=x.hermitian, unitary=x.unitary, space=x.space, terms=x.terms))
     end
 end
+
+"""Wrapped symbolic bra"""
+@symbolic_wrap struct SBra <: AbstractBra
+    x::Symbolic{AbstractBra}
+end
+SBra(name, basis) = SBra(Sym{AbstractBra}(name=name, basis_l=TrivialSpace(), basis_r=basis))
+basis(bra::SBra) = bra.x.basis_r
+
+"""Wrapped symbolic ket"""
+@symbolic_wrap struct SBra <: AbstractKet
+    x::Symbolic{AbstractKet}
+end
+SKet(name, basis) = SKet(Sym{AbstractKet}(name=name, basis_l=basis, basis_r=TrivialSpace()))
+basis(bra::SBra) = bra.x.basis_l
+
+"""Wrapped symbolic operator"""
+@symbolic_wrap struct SOperator <: AbstractOperator
+    x::Symbolic{AbstractOperator}
+end
+SOperator(name, basis) = SOperator(Sym{AbstractOperator}(name, basis_l=space, basis_r=basis))
+basis_l(op::SOperator) = op.x.basis_l
+basis_r(op::SOperator) = op.x.basis_r
+
+"""Wrapped symbolic superoperator"""
+@symbolic_wrap struct SSuperOperator <: AbstractSuperOperator
+    x::Symbolic{AbstractSuperOperator}
+end
+SSuperOperator(name, basis) = SSuperOperator(Sym{AbstractSuperOperator}(name, basis_l=KetBraBasis(basis), basis_r=KetBraBasis(basis)))
+basis_l(op::SSuperOperator) = op.x.basis_l
+basis_r(op::SSuperOperator) = op.x.basis_r
+
 
 """
     @bra(name, space)
@@ -161,8 +202,8 @@ julia> @bra b₂ OscillatorSpace()
 ⟨b₂|
 ```
 """
-macro bra(name, space)
-    :($(esc(name)) = Sym(name=$(Expr(:quote, name)), space=$(QOSpace(TrivialSpace(), space)))
+macro bra(name, basis)
+    :($(esc(name)) = SBra($(Expr(:quote, name)), $(basis)))
 end
 
 """
@@ -178,8 +219,8 @@ julia> @ket k₂ OscillatorSpace()
 |k₂⟩
 ```
 """
-macro ket(name, space)
-    :($(esc(name)) = Sym(name=$(Expr(:quote, name)), space=$(QOSpace(space, TrivialSpace())))
+macro ket(name, basis)
+    :($(esc(name)) = SKet($(Expr(:quote, name)), $(basis)))
 end
 
 """
@@ -195,10 +236,10 @@ julia> @op B OscillatorSpace()
 B
 ```
 """
-macro op(name, space)
-    :($(esc(name)) = Sym(name=$(Expr(:quote, name)), space=$(QOSpace(space, space))))
+macro op(name, basis)
+    :($(esc(name)) = SOperator($(Expr(:quote, name)), $(basis)))
 end
 
-macro superop(name, space)
-    :($(esc(name)) = Sym($(Expr(:quote, name)), $(basis))) # FIXME...
+macro superop(name, basis)
+    :($(esc(name)) = SSuperOperator($(Expr(:quote, name)), $(basis)))
 end

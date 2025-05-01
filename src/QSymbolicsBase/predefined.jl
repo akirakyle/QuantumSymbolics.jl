@@ -23,6 +23,8 @@ function SZero(space)
     isbraspace(space) && return SZeroBra(space)
     isoperatorspace(space) && return SZeroBra(space)
 end
+function SZero(bl, br)
+end
 
 """The identity operator for a given basis
 
