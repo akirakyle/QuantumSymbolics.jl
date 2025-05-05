@@ -22,7 +22,7 @@ function _set_add_dict!(d, x)
 end
 
 function +(a::BasicQSymbolic{T}, b::BasicQSymbolic{S}) where {T,S}
-    check_addible(a,b)
+    s = check_addible(space(a),space(b))
 
     if isadd(a)
         d = Dict(a.dict)
@@ -36,7 +36,7 @@ function +(a::BasicQSymbolic{T}, b::BasicQSymbolic{S}) where {T,S}
         _set_add_dict!(d, b)
     end
     length(d) == 0 && return zero(a)
-    add = Add{T}(dict=d, basis_l=basis_l(a), basis_r=basis_r(a))
+    add = Add{QOType(s)}(dict=d, space=s)
     metadata(add)[:hermitian] = ishermitian(a) && ishermitian(a)
 end
 
@@ -51,10 +51,10 @@ function Base.:(*)(c::T, x::BasicQSymbolic{S}) where {T<:Union{Number, Symbolic{
     else
         bases = (:basis_l => basis_l(x), :basis_r => basis_r(x))
         op = @match x begin
-            (Sym(_) || Add(_)) => Mul{S}(coeff=c, terms=[x], bases...)
+            (Sym(_) || Term(_) || Add(_)) => Mul{S}(coeff=c, terms=[x], bases...)
             Mul(_) => Mul{S}(coeff=c*x.coeff, terms=x.terms, bases...)
-            Tensor(_) => Tensor{S}(coeff=c*x.coeff, terms=x.terms, bases...)
             Sum(_) => Sum{S}(coeff=c*x.coeff, terms=x.terms, bases...)
+            Tensor(_) => Tensor{S}(coeff=c*x.coeff, terms=x.terms, bases...)
         end
         metadata(op)[:hermitian] = _isreal(c) && ishermitian(x)
         op

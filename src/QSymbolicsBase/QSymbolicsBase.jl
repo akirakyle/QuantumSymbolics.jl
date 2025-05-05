@@ -87,19 +87,10 @@ macro withmetadata(strct)
 end
 
 ##
-# Utilities
-##
-
-include("utils.jl")
-
-##
 # Most symbolic objects defined here
 ##
 
-include("literal_objects.jl")
 include("basic_ops_homogeneous.jl")
-include("basic_ops_inhomogeneous.jl")
-include("basic_superops.jl")
 include("linalg.jl")
 include("predefined.jl")
 include("predefined_CPTP.jl")

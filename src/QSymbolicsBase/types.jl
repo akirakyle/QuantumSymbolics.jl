@@ -18,41 +18,35 @@ _default_md() = Dict{Symbol, Any}(
 @data BasicQSymExpr{T} <: Symbolic{T} begin
     struct Term
         metadata::Dict{Symbol,Any} = _default_md()
-        basis_l::Basis
-        basis_r::Basis
+        space::QOSpace
         f::Function
         arguments::Vector{BasicQSymExpr.Type} = BasicQSymExpr.Type[]
     end
     struct Sym
         metadata::Dict{Symbol,Any} = _default_md()
-        basis_l::Basis
-        basis_r::Basis
+        space::QOSpace
         name::Symbol
     end
     struct Add
         metadata::Dict{Symbol,Any} = _default_md()
-        basis_l::Basis
-        basis_r::Basis
+        space::QOSpace
         dict::Dict{BasicQSymExpr.Type, Symbolic}
     end
     struct Mul
         metadata::Dict{Symbol,Any} = _default_md()
-        basis_l::Basis
-        basis_r::Basis
+        space::QOSpace
         coeff::Symbolic
         terms::Vector{BasicQSymExpr.Type}
     end
     struct Sum
         metadata::Dict{Symbol,Any} = _default_md()
-        basis_l::Basis
-        basis_r::Basis
+        space::QOSpace
         coeff::Symboli
         terms::Vector{BasicQSymExpr.Type}
     end
     struct Tensor
         metadata::Dict{Symbol,Any} = _default_md()
-        basis_l::Basis
-        basis_r::Basis
+        space::QOSpace
         coeff::Symbolic
         terms::Vector{BasicQSymExpr.Type}
     end
@@ -116,8 +110,7 @@ istensor(x)  = isa_SymType(:Tensor, x)
 issum(x)  = isa_SymType(:Sum, x)
 
 metadata(x::BasicQSymbolic) = x.metadata
-basis_l(x::BasicQSymbolic) = x.basis_l
-basis_r(x::BasicQSymbolic) = x.basis_r
+space(x::BasicQSymbolic) = x.space
 ishermitian(x::BasicQSymbolic) = x.metadata[:hermitian]
 isunitary(x::BasicQSymbolic) = x.unitary[:unitary]
 
@@ -158,36 +151,18 @@ function get_coeff_and_op(x::BasicQSymbolic)
     end
 end
 
-"""Wrapped symbolic bra"""
-@symbolic_wrap struct SBra <: AbstractBra
-    x::Symbolic{AbstractBra}
-end
-SBra(name, basis) = SBra(Sym{AbstractBra}(name=name, basis_l=TrivialSpace(), basis_r=basis))
-basis(bra::SBra) = bra.x.basis_r
+#"""Wrapped symbolic bra"""
+#@symbolic_wrap struct SBra <: AbstractBra
+#    x::Symbolic{AbstractBra}
+#end
+#SBra(name, basis) = SBra(Sym{AbstractBra}(name=name, basis_l=TrivialSpace(), basis_r=basis))
+#basis(bra::SBra) = bra.x.basis_r
 
-"""Wrapped symbolic ket"""
-@symbolic_wrap struct SBra <: AbstractKet
-    x::Symbolic{AbstractKet}
-end
-SKet(name, basis) = SKet(Sym{AbstractKet}(name=name, basis_l=basis, basis_r=TrivialSpace()))
-basis(bra::SBra) = bra.x.basis_l
-
-"""Wrapped symbolic operator"""
-@symbolic_wrap struct SOperator <: AbstractOperator
-    x::Symbolic{AbstractOperator}
-end
-SOperator(name, basis) = SOperator(Sym{AbstractOperator}(name, basis_l=space, basis_r=basis))
-basis_l(op::SOperator) = op.x.basis_l
-basis_r(op::SOperator) = op.x.basis_r
-
-"""Wrapped symbolic superoperator"""
-@symbolic_wrap struct SSuperOperator <: AbstractSuperOperator
-    x::Symbolic{AbstractSuperOperator}
-end
-SSuperOperator(name, basis) = SSuperOperator(Sym{AbstractSuperOperator}(name, basis_l=KetBraBasis(basis), basis_r=KetBraBasis(basis)))
-basis_l(op::SSuperOperator) = op.x.basis_l
-basis_r(op::SSuperOperator) = op.x.basis_r
-
+SBra(name, basis) = Sym{AbstractBra}(name=name, space=QOSpace{AbstractBra}(basis))
+SKet(name, basis) = Sym{AbstractKet}(name=name, space=QOSpace{AbstractKet}(basis))
+SOperator(name, basis) = Sym{AbstractOperator}(name, space=QOSpace{AbstractOperator}(KetBraBasis(basis)))
+SOperator(name, bl, br) = Sym{AbstractOperator}(name, space=QOSpace{AbstractOperator}(KetBraBasis(bl,br)))
+SSuperOperator(name, basis) = Sym{AbstractSuperOperator}(name, space=QOSpace{AbstractSuperOperator}(KetBraBasis(KetBraBasis(basis))))
 
 """
     @bra(name, space)
@@ -243,3 +218,9 @@ end
 macro superop(name, basis)
     :($(esc(name)) = SSuperOperator($(Expr(:quote, name)), $(basis)))
 end
+
+
+# can maybe do something like
+# Operator(space, :symbol_name)
+# gives a wrapped SOperator with linear algebra defined so tha
+# everything wrapps to Ket/Bra/Operator typs with the .data field being a Symbolic{{Ket/Bra/Operator}}
